@@ -34,7 +34,7 @@ laser		bit	P1.2
 debut:		
 				;clr	P3.1 ???    								;Initialisation du lcd
 				lcall	init_lcd
-				
+				lcall	send_idle_lcd
 				
 ;-------------------------------------------------------;
 ;initialisation de la liaison serie TSOP 1738				
@@ -84,9 +84,9 @@ rpt_inf:			jnc	rpt_inf							; boucle infinie
 				jz	reçu_G 
 
 
-
 				clr   	laser
 				clr	sirene
+				lcall   send_idle_lcd
 				clr	C
 				sjmp	rpt_inf
 
@@ -267,6 +267,24 @@ init_lcd:
 				
 				pop 	out
 				ret
+
+
+;envoie du idle
+send_idle_LCD:												;  Envoie du 4 aux LCD
+				lcall ligne_1
+				mov	DPTR,#line_idle_a
+				lcall	write_line
+				
+				lcall ligne_2
+				mov	DPTR,#line_idle_b
+				lcall	write_line
+				
+				;setb	P3.1 ???
+				
+				clr	C
+				ret
+
+
 				
 ;envoie du 4
 send_4_LCD:												;  Envoie du 4 aux LCD
@@ -325,11 +343,21 @@ end_read:	reti
 ;---------------------------------------------------------------------------------------------------------
 ; data
 
-line_4_a:
+line_idle_a:
 				db	'HORS'
 				db	00h
-line_4_b:
+line_idle_b:
 				db	'PORTEE'
+				db	00h
+
+
+
+
+line_4_a:
+				db	'IT IS OVER'
+				db	00h
+line_4_b:
+				db	'9000'
 				db	00h
 line_droit:
 				db	'DROITE'
