@@ -32,8 +32,12 @@ laser		bit	P1.2
 
 				org   0030h
 debut:		
-				;clr	P3.1 ???    								;Initialisation du lcd
+
+				clr     P1.0
+				clr     P1.1
+				clr     P1.2								;Initialisation du lcd
 				lcall	init_lcd
+				setb	P1.0
 				lcall	send_idle_lcd
 				
 ;-------------------------------------------------------;
@@ -274,12 +278,12 @@ send_idle_LCD:												;  Envoie du 4 aux LCD
 				lcall ligne_1
 				mov	DPTR,#line_idle_a
 				lcall	write_line
-				
+				setb	P1.1
 				lcall ligne_2
 				mov	DPTR,#line_idle_b
 				lcall	write_line
+				setb	P1.2
 				
-				;setb	P3.1 ???
 				
 				clr	C
 				ret
@@ -296,7 +300,7 @@ send_4_LCD:												;  Envoie du 4 aux LCD
 				mov	DPTR,#line_4_b
 				lcall	write_line
 				
-				;setb	P3.1 ???
+				
 				
 				clr	C
 				ret
