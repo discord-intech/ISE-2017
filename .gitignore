@@ -1,4 +1,5 @@
 *.mcu8051ide
+
 *.adf
 *.bin
 *.hex
