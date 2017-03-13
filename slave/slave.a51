@@ -12,14 +12,16 @@
 RS		bit	P0.5
 RW		bit	P0.6
 E		bit	P0.7
-out	equ	P2
+out		equ	P2
+sirene		bit	P1.3
+laser		bit	P1.2
 
 ;---------------------------------------------------------------------------------------------------------
 ;Implementation des adresses
 
 ;Programme principal au reset
 
-				org	0000h									;adresse du PC aprËs RESET materiel
+				org	0000h									;adresse du PC apr√®s RESET materiel
             LJMP  debut
 
 				org 	0023h									;INT serial
@@ -36,7 +38,7 @@ debut:
 				
 ;-------------------------------------------------------;
 ;initialisation de la liaison serie TSOP 1738				
-				mov	SCON,#51h
+				mov	SCON,#51h								;Mode asynchrone + REN
 				mov	A,TMOD
 				anl	A,#0Fh
 				orl	A,#20h
@@ -52,13 +54,79 @@ debut:
 				
 			
 			
-			
+				clr 	C
 			
 
-rpt_inf:		jnc	rpt_inf							; boucle infinie
+rpt_inf:			jnc	rpt_inf							; boucle infinie
+
+;----------------------------------------------------------
+;Code apr√®s reception
+
+;Lecture du message re√ßu	
+				mov 	A,@R0
+				clr	C
+				subb	A,#0B4h
+				jz	re√ßu_4 
 				
+				mov 	A,@R0
+				clr	C
+				subb	A,#44h
+				jz	re√ßu_D 
+				
+				mov 	A,@R0
+				clr	C
+				subb	A,#0C3h
+				jz	re√ßu_C 
+
+				mov 	A,@R0
+				clr	C
+				subb	A,#47h
+				jz	re√ßu_G 
+
+
+
+				clr   	laser
+				clr	sirene
+				clr	C
+				sjmp	rpt_inf
+
+;----------------------------------------------------------
+;Sous-programme du reception du "4"
+re√ßu_4:				
+
+				lcall 	send_4_LCD
+				setb	laser
+				setb	sirene
+				clr	C
+				ljmp	rpt_inf
+
+;----------------------------------------------------------
+;Sous-programme du reception du "D"
+re√ßu_D:				
+				lcall 	send_D_LCD
+				setb	laser
+				setb	sirene
+				clr	C
+				ljmp	rpt_inf
+;----------------------------------------------------------
+;Sous-programme du reception du "C"
+re√ßu_C:				
+				lcall 	send_C_LCD
+				setb	laser
+				setb	sirene
+				clr	C
+				ljmp	rpt_inf
+;----------------------------------------------------------
+;Sous-programme du reception du "G"
+re√ßu_G:				
+				lcall 	send_G_LCD
+				setb	laser
+				setb	sirene
+				clr	C
+				ljmp	rpt_inf
+
 ;-------------------------------------------------------------------------------------------------------------
-;Sous-programme timer 40 ms, entrÈ void, sortie void, utilisÈ A				
+;Sous-programme timer 40 ms, entr√© void, sortie void, utilis√© A				
 timer_40:													
 				push	Acc
 				mov 	tmod,#01h
@@ -137,7 +205,7 @@ ligne_2:
 				pop	Acc
 				ret
 				
-; sortie P2 ; entrÈe : char dans Acc					
+; sortie P2 ; entr√©e : char dans Acc					
 write_char:
  				push	Acc
  				clr	RW
@@ -151,16 +219,16 @@ write_char:
  				pop	Acc
  				ret
 
-; sortie DPTR modifiÈ ; entrÈe addr ligne dans DPTR
+; sortie DPTR modifi√© ; entr√©e addr ligne dans DPTR
 write_line:
 				push	Acc
 				clr	RW
  				setb	RS
  				clr	E
-rpt_line:				                              ; Bouclage d'Ècriture des char
+rpt_line:				                              ; Bouclage d'√©criture des char
 				clr	A
 				movc	A,@A+DPTR
-				jz		write_line_ret							; fin du sous-prog quand le char ‡ Ècrire vaut '/0'
+				jz		write_line_ret							; fin du sous-prog quand le char √† √©crire vaut '/0'
 				lcall write_char
 
 				inc 	DPTR
@@ -171,7 +239,7 @@ write_line_ret:
 				pop	Acc
 				ret
 
-; sortie void, entrÈ void, utilisÈ P2
+; sortie void, entr√© void, utilis√© P2
 init_lcd:
 				push	out
 				
@@ -191,7 +259,7 @@ init_lcd:
 				mov	out,#01h                    ; clean affichage
 				lcall en_lcd_code
 				
-				mov	out,#06h                    ; curseur incrÈmentage auto
+				mov	out,#06h                    ; curseur incr√©mentage auto
 				lcall en_lcd_code
 				
 				mov	out,#3Ch                    ; affichage deux lignes
@@ -248,11 +316,10 @@ read:
 				jb		TI,ti_clr
 				mov	@R0,SBUF
 				clr	RI
-				inc	R0
 				sjmp	end_read
 ti_clr:
 				clr	TI
-				mov	R0,#40h	
+				setb	C
 end_read:	reti	
 
 ;---------------------------------------------------------------------------------------------------------
