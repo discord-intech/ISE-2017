@@ -234,6 +234,7 @@ check_pwm:			mov		a,vm2h
 				subb		a,#maxspeed
 				jnc		no_overflow
 				mov		vm2h,#maxspeed
+				mov		vm2l,#00h
 no_overflow:
 				mov		a,vm2h
 				clr		c
@@ -261,6 +262,7 @@ durecom:										 ; gère r1 =  Nb de commandes soit r1*20ms
 
 odo_inc:
 				inc		odoc
+				cpl		ledmC
 				reti		
 
 
