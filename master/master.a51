@@ -232,13 +232,13 @@ over:				mov		b,#speed_kp
 check_pwm:			mov		a,vm2h
 				clr		c
 				subb		a,#maxspeed
-				jc		no_overflow
+				jnc		no_overflow
 				mov		vm2h,#maxspeed
 no_overflow:
 				mov		a,vm2h
 				clr		c
 				subb		a,#0fah
-				jnc		no_underflow
+				jc		no_underflow
 				mov		vm2h,#0fah
 				mov		vm2l,#24h
 no_underflow:	
