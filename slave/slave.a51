@@ -12,7 +12,8 @@
 RS		bit	P0.5
 RW		bit	P0.6
 E		bit	P0.7
-out		equ	P2
+lcd		equ	P2
+busy		bit		p2.7
 sirene		bit	P1.3
 laser		bit	P1.2
 
@@ -33,120 +34,85 @@ laser		bit	P1.2
 				org   0030h
 debut:		
 
-				clr     P1.0
-				clr     P1.1
-				clr     P1.2								;Initialisation du lcd
+											;Initialisation du lcd
 				lcall	init_lcd
-				setb	P1.0
+				
 				lcall	send_idle_lcd
 				
-;-------------------------------------------------------;
-;initialisation de la liaison serie TSOP 1738				
-				mov	SCON,#51h								;Mode asynchrone + REN
-				mov	A,TMOD
-				anl	A,#0Fh
-				orl	A,#20h
-				mov	TMOD,A
-				mov	R0,#40h
-				clr 	RI
-				clr	TI
-				setb 	EA
-				setb	ES
-				setb	TR1
+				lcall	init_serie
 				
-				
-				
-			
-			
-				clr 	C
-			
-
-rpt_inf:			jnc	rpt_inf							; boucle infinie
+fin:			sjmp	fin							; boucle infinie
 
 ;----------------------------------------------------------
 ;Code après reception
 
-;Lecture du message reçu	
-				mov 	A,@R0
+;Lecture du message recu	
+recv:			mov 	A,@R0
 				clr	C
 				subb	A,#0B4h
-				jz	reçu_4 
+				jz	recu_4 
 				
 				mov 	A,@R0
 				clr	C
 				subb	A,#44h
-				jz	reçu_D 
+				jz	recu_D 
 				
 				mov 	A,@R0
 				clr	C
 				subb	A,#0C3h
-				jz	reçu_C 
+				jz	recu_C 
 
 				mov 	A,@R0
 				clr	C
 				subb	A,#47h
-				jz	reçu_G 
+				jz	recu_G 
 
 
-				clr   	laser
-				clr	sirene
+				
 				lcall   send_idle_lcd
-				clr	C
-				sjmp	rpt_inf
-
+				
+				
+				ret
 ;----------------------------------------------------------
 ;Sous-programme du reception du "4"
-reçu_4:				
+recu_4:				
 
 				lcall 	send_4_LCD
-				setb	laser
-				setb	sirene
-				clr	C
-				ljmp	rpt_inf
+				
+				ret
 
 ;----------------------------------------------------------
 ;Sous-programme du reception du "D"
-reçu_D:				
+recu_D:				
 				lcall 	send_D_LCD
-				setb	laser
-				setb	sirene
-				clr	C
-				ljmp	rpt_inf
+				
+				ret
 ;----------------------------------------------------------
 ;Sous-programme du reception du "C"
-reçu_C:				
+recu_C:				
 				lcall 	send_C_LCD
-				setb	laser
-				setb	sirene
-				clr	C
-				ljmp	rpt_inf
+				ret
+				
 ;----------------------------------------------------------
 ;Sous-programme du reception du "G"
-reçu_G:				
+recu_G:				
 				lcall 	send_G_LCD
-				setb	laser
-				setb	sirene
-				clr	C
-				ljmp	rpt_inf
+				ret
+				
 
 ;-------------------------------------------------------------------------------------------------------------
-;Sous-programme timer 40 ms, entré void, sortie void, utilisé A				
-timer_40:													
-				push	Acc
-				mov 	tmod,#01h
-
-				clr 	tr0                        ;1
-				mov	A,#0B0h							;1
-				add	A,tl0                      ;1
-				mov	tl0,A                      ;1
-				mov	A,#0Ch                     ;1
-				addc	A,th0                      ;1
-				mov	th0,A                      ;1
-				clr	tf0                        ;1
-				setb	tr0                
-wait_40:		jnb	tf0,wait_40     
-				pop   Acc   
-				ret          
+;Sous-programme timer 50 ms, entré void, sortie void, utilisé A				
+tempo:
+				clr		tr0
+				clr		tf0
+				mov		tmod,#01h		;comptage sur 16 bits avec horloge interne (Quartz 12 MHz)
+				mov		th0,#3Ch			;(65535-15535)=40000d soit 3CB0h
+				mov		tl0,#0B0h
+				setb		tr0				;lance le comptage de Timer0
+attent_tf0:
+				jnb		tf0,attent_tf0	;attente de la fin du comptage
+				clr		tr0				;remise à 0 du drapeau de fin de comptage
+				ret       
  				           
  				
  				
@@ -155,134 +121,107 @@ wait_40:		jnb	tf0,wait_40
 ; Sous-programmes LCD
 
 ; sortie void
-test_busy_lcd:
-				clr 	RS
-				setb	RW
-				setb	E
+test_busy_lcd:								;test de la valeur du BUSY FLAG renvoyé sur DB7 par le LCD
 				
+				mov		lcd,#0ffh		;déclaration du port de communication avec LCD en lecture	
+				setb		rw					;2 lignes pour autoriser la lecture de BF
+				clr		rs
+				setb		E					;Bf doit être lu entre un front montant et un front descendant
+												;de E
+
 check_busy:
-				jb			P2.7,check_busy
-			
-				clr	E
+				jb			busy,check_busy	;BF = 1 LCD occupé, BF = 0 LCD libre
+				clr		E
 				ret
 				
 ; sortie	void
-en_lcd_code:
-				clr	RW
-				clr	RS
-				clr	E
+en_lcd_code:								;sous programme de validation d'une instruction 
+				clr		rs					;5 lignes = séquence permettant de valider l'envoi d'une 
+				clr		rw					;instruction au LCD
+				clr		E
 				setb		E
-				clr	E
-				lcall	test_busy_lcd
+				clr		E
+				lcall		test_busy_lcd	;appel au sous programme de test de l'état d'occupation du LCD
 				ret
 
 ; sortie void
 en_lcd_data:
-				clr	RW
-				setb	RS
-				clr	E
+				
+				setb		rs					;5 lignes = séquence permettant de valider l'envoi d'une
+				clr		rw					;instruction au LCD
+				clr		E
 				setb		E
-				clr	E
-				lcall	test_busy_lcd
+				clr		E
+				lcall		test_busy_lcd	;appel au sous programme de test de l'état d'occupation du LCD
 				ret
 	
 ; sortie void			
 ligne_1:
-				push	Acc
-				mov	out,#01h
-				lcall	en_lcd_code
-				
-				mov	out,#80h
-				lcall	en_lcd_code
-				pop	Acc
+				push		acc
+				mov		lcd,#01h			;effacement de l'affichage et retour du curseur en début de ligne
+				lcall		en_lcd_code		;appel au sous programme de validation d'une commande
+				mov		lcd,#10000000b	;placement  à l'adresse 00h de la DDram du LCD, code 80h
+				lcall		en_lcd_code		;appel au sous programme de validation d'une commande
+				pop		acc
 				ret
 				
 ; sortie void			
 ligne_2:
-				push	Acc
-				clr	RS
-				clr	RW
-				setb	E
-				clr	E
-				mov	out,#0C0h
-				lcall	en_lcd_code
-				pop	Acc
+				push		acc
+				mov		lcd,#0C0h		;adresse dans la DDRAM (40h) correspondant au debut de la ligne 2
+				lcall		en_lcd_code
+				pop 		acc
 				ret
 				
 ; sortie P2 ; entrée : char dans Acc					
-write_char:
- 				push	Acc
- 				clr	RW
- 				setb	RS
- 				clr	E
- 				
- 				mov	out,A
- 				
- 				lcall en_lcd_data
- 				
- 				pop	Acc
- 				ret
-
-; sortie DPTR modifié ; entrée addr ligne dans DPTR
-write_line:
-				push	Acc
-				clr	RW
- 				setb	RS
- 				clr	E
-rpt_line:				                              ; Bouclage d'écriture des char
-				clr	A
-				movc	A,@A+DPTR
-				jz		write_line_ret							; fin du sous-prog quand le char à écrire vaut '/0'
-				lcall write_char
-
-				inc 	DPTR
-				sjmp	rpt_line
-				
-write_line_ret:
-				clr	RS
-				pop	Acc
-				ret
+emission:
+            CLR		 A
+            movc      A,@A+DPTR
+            JZ        sortie
+            mov       P2,A
+            lcall     en_lcd_data
+            inc       DPTR
+           
+            sJMP      emission
+sortie:     ret
 
 ; sortie void, entré void, utilisé P2
 init_lcd:
-				push	out
-				
-				clr	RS
-				clr	RW
-				clr	E
-
-				lcall	timer_40
-				
-				
-				mov	out,#3Ch                    ; affichage deux lignes
-				lcall en_lcd_code
-				
-				mov	out,#0Ch							 ; allumage
-				lcall	en_lcd_code 
-			
-				mov	out,#01h                    ; clean affichage
-				lcall en_lcd_code
-				
-				mov	out,#06h                    ; curseur incrémentage auto
-				lcall en_lcd_code
-				
-				mov	out,#3Ch                    ; affichage deux lignes
-				lcall en_lcd_code
-				
-				pop 	out
+				mov		r6,#4
+init1:				lcall		tempo
+				mov		lcd,#38h			;affiche sur 2 lignes en 5x8 points
+				lcall		en_lcd_code		;sous programme de validation d'une commande
+				djnz     r6, init1
+				lcall		tempo
+				mov		lcd,#08h			;extinction
+				lcall		en_lcd_code
+				lcall    tempo
+				mov		lcd,#01h
+				lcall		en_lcd_code
+				lcall		tempo
+				mov		lcd,#06h
+				lcall		tempo
+				mov		lcd,#0Ch			;allumage de l'afficheur
+				lcall		en_lcd_code		;sous programme de validation d'une commande
+				lcall		tempo 
+				mov		lcd,#01h			;effacement de l'affichage
+				lcall		en_lcd_code		;sous programme de validation d'une commande
+				lcall		tempo
+				mov		lcd,#06h			;incrémente le curseur
+				lcall		en_lcd_code		;sous programme de validation d'une commande
+				mov		lcd,#38h			;affiche sur 2 lignes en 5x8 points
+				lcall		en_lcd_code		;sous programme de validation d'une commande
 				ret
 
 
 ;envoie du idle
 send_idle_LCD:												;  Envoie du 4 aux LCD
-				lcall ligne_1
-				mov	DPTR,#line_idle_a
-				lcall	write_line
-				setb	P1.1
-				lcall ligne_2
-				mov	DPTR,#line_idle_b
-				lcall	write_line
-				setb	P1.2
+				mov      DPTR,#line_idle_a
+		   		lcall    ligne_1
+		   		lcall    emission
+		   		mov      DPTR,#line_idle_b
+		   		lcall    ligne_2
+		   		lcall    emission
 				
 				
 				clr	C
@@ -292,13 +231,12 @@ send_idle_LCD:												;  Envoie du 4 aux LCD
 				
 ;envoie du 4
 send_4_LCD:												;  Envoie du 4 aux LCD
-				lcall ligne_1
-				mov	DPTR,#line_4_a
-				lcall	write_line
-				
-				lcall ligne_2
-				mov	DPTR,#line_4_b
-				lcall	write_line
+				mov      DPTR,#line_4_a
+		   		lcall    ligne_1
+		   		lcall    emission
+		   		mov      DPTR,#line_4_b
+		   		lcall    ligne_2
+		   		lcall    emission
 				
 				
 				
@@ -307,42 +245,64 @@ send_4_LCD:												;  Envoie du 4 aux LCD
 				
 ;envoie de G
 send_G_LCD:												;  Envoie du G aux LCD
-				lcall ligne_1
-				mov	DPTR,#line_gauche
-				lcall	write_line
+				mov      DPTR,#line_gauche
+		   		lcall    ligne_1
+		   		lcall    emission
+		   		
 				
 				clr	C
 				ret
 
 ;envoie de G
 send_D_LCD:												;  Envoie du D aux LCD
-				lcall ligne_1
-				mov	DPTR,#line_droit
-				lcall	write_line
+				mov      DPTR,#line_droit
+		   		lcall    ligne_1
+		   		lcall    emission
 				
 				clr	C
 				ret
 				
 ;envoie de G
 send_C_LCD:												;  Envoie du C aux LCD
-				lcall ligne_1
-				mov	DPTR,#line_centre
-				lcall	write_line
+				mov      DPTR,#line_centre
+		   		lcall    ligne_1
+		   		lcall    emission
 				
 				clr	C
 				ret		
 
 ;---------------------------------------------------------------------------------------------------------------------
+;initialisation de la liaison serie TSOP 1738	
+init_serie:
+							
+				mov	SCON,#51h								;Mode asynchrone + REN
+				mov	A,TMOD
+				anl	A,#0Fh
+				orl	A,#20h
+				mov	TMOD,A
+				mov	R0,#40h
+				mov	TH1,#0E6h
+				mov	TL1,#0E6h
+				clr 	RI
+				clr	TI
+				setb 	EA
+				setb	ES
+				setb	TR1
+				ret
+
 ;sous-programme de la lecture serie sur le recepteur TSOP 1738
 read:			
-				jb		TI,ti_clr
+				setb  TR1
+				clr	TI
+				clr	RI
+wait:			JNB	RI,wait
 				mov	@R0,SBUF
 				clr	RI
-				sjmp	end_read
-ti_clr:
-				clr	TI
-				setb	C
-end_read:	reti	
+				setb  TR1
+				
+				lcall	recv
+				
+				reti	
 
 ;---------------------------------------------------------------------------------------------------------
 ; data
@@ -373,8 +333,9 @@ line_gauche:
 				db 'GAUCHE'
 				db 00h
 
-fin:
+
 
 ;---------------------------------------------------------------------------------------------------------
 ; Fin d'assemblage 
 				end 
+
