@@ -27,13 +27,12 @@ vmr1l			equ		78h
 
 maxspeedh		equ		0f9h
 maxspeedl		equ		00h
-speed_kp		equ		1
-
-nb_ticks_odo		equ		7
+speed_kp		equ		6
+speed_ki		equ		1
 
 servo_inc		equ		90
 
-consigne		equ		8
+consigne		equ		2
 
 ;memoires recevant les valeurs a charger dans Timer0 
 ;pour realiser les durees de:
@@ -48,9 +47,11 @@ vmr2l			equ		79h		; reste du moteur
 vmr2h			equ		78h
 
 odoc			equ		77h		; ticks codeuse
+asservitc		equ		75h		; compteur pour asserv vitesse
 
 servostate		equ		73h		; etat servo 0=centre 1=gauche 2=droite
-timer_ov		equ		71h
+integral		equ		71h
+
 
 vth0			equ		6eh		;memoire intermediaire recevant les valeurs
 vtl0			equ		6fh		;a transferer dans th0 et tl0
@@ -69,7 +70,6 @@ vtl0			equ		6fh		;a transferer dans th0 et tl0
 				org		0013h			;interruption int1
                               	         
 				org		001Bh			;interruption timer1 
-				ljmp		timer_overflow					
 
 				org		0023h			;interruption liaison serie
 
@@ -86,6 +86,9 @@ pinttimer0:
 
 tr0a0: 
 				cjne		r0,#0,tr0a1		;direction
+				djnz		asservitc,no_speed
+				lcall		asservissement_vitesse			
+no_speed:
 				mov		a,servostate
 				cjne		a,#1,droite
 				lcall		tournedroite
@@ -233,27 +236,56 @@ asservissement_vitesse:
 				push		Acc
 				push		B
 
-				mov		a,timer_ov				
+				mov		a,odoc				
 				clr 		c
 				subb		a,#consigne
 				jz		check_pwm
 				jnc		over
 				cpl		a
-		;		mov		b,#2
-		;		div		ab
-			;	mov		b,#speed_kp
-			;	mul		ab
-				mov		r7,#speed_kp
-				lcall		addmot
+				mov		b,a
+				add		a,integral
+				mov		integral,a
+				mov		a,b
+				mov		b,#2
+				div		ab
+				inc		a
+				mov		b,#speed_kp
+				mul		ab
+				mov		r7,a
+				mov		a,integral
+				mov		b,#4
+				div		ab
+				mov		b,#speed_ki
+				mul		ab
+				mov		b,r7
+				add		a,b
+				mov		r7,a
+				lcall		sousmot
 				sjmp		check_pwm				
 
 over:
+				mov		b,a
+				subb		a,integral
+				mov		integral,a
+				mov		a,b
 		;		mov		b,#2
 		;		div		ab
-			;	mov		b,#speed_kp
-			;	mul		ab
-				mov		r7,#speed_kp
-				lcall		sousmot
+				inc		a
+				mov		b,#speed_kp
+				inc		b
+				inc		b
+				mul		ab
+				mov		r7,a
+				mov		a,integral
+				mov		b,#4
+				div		ab
+				mov		b,#speed_ki
+				mul		ab
+				mov		b,r7
+				add		a,b
+				mov		r7,a
+
+				lcall		addmot
 				
 check_pwm:			mov		a,vm2h
 				clr		c
@@ -292,39 +324,24 @@ too_slow:
 		
 
 no_underflow:	
+				mov		asservitc,#12	; valeur de compteur pour vitesse
+				mov		odoc,#0
 				pop		B
 				pop		Acc
 				pop		psw
 				ret
 
 ;----------------------------------------------------------------------
-;start/stop motors
+;reset integral
 
-start_motor:
-				mov		vm2h,#0f9h	;chargement de la valeur min 
-				mov		vm2l,#0c0h	;(65536-2000)=63536d=f830h
-				mov		vmr2h,#0c1h	;reste de l'impulsion 
-				mov		vmr2l,#0dch	;(65536-15500)=50036d=c374h
+reset_integral:
+				mov		integral,#0
 				ret
 
-stop_motor:		
-				mov		vm2l,#vd1l	; chargement de la valeur de repos 1500æs
-				mov		vm2h,#vd1h	; pour le moteur
-				mov		vmr2l,#vmr1l; complement moteur
-				mov		vmr2h,#vmr1h
-				ret
-				
-;----------------------------------------------------------------------
-;timer overflow
-
-timer_overflow:
-				inc		timer_ov
-			;	cpl		ledmC
-			;	clr		tf1
-				reti
 
 ;----------------------------------------------------------------------
 ;nombre de fois 20ms
+
 durecom:										 ; gère r1 =  Nb de commandes soit r1*20ms 
 				jnb		finint,durecom
 				clr		finint
@@ -334,26 +351,19 @@ durecom:										 ; gère r1 =  Nb de commandes soit r1*20ms
 ;incrémentation codeuse
 
 odo_inc:
-				djnz		odoc,odo_inc_reti
-				clr		tr1
-				cpl		ledmC
-				mov		odoc,#nb_ticks_odo
-				lcall		asservissement_vitesse
-				mov		timer_ov,#0
-				mov		th1,#0	
-				mov		tl1,#0	
-				setb		tr1
-odo_inc_reti:			reti		
+				inc		odoc
+				;cpl		ledmC
+				reti		
 
 
 ;------------------------------------------
 debut:
 				mov		sp,#30h		;pour sortir de la zone de banque
-				mov		tmod,#11h	
-				mov		th1,#0	
-				mov		tl1,#0	 
-			;	mov		scon,#52h	; mode 1 10 bits, ren=1,ti=1
-			;	setb		tr1			; lancement timer1 pour diviser fqz (baudrate)
+				mov		tmod,#21h	; T1 mode 2(autoreload),T0 16bits
+				mov		th1,#0E6h	; LS … 1200bits/s quartz 12MHz
+				mov		tl1,#0E6h	; pour le d‚mmarage. 
+				mov		scon,#52h	; mode 1 10 bits, ren=1,ti=1
+				setb		tr1			; lancement timer1 pour diviser fqz (baudrate)
 				clr		dir 
 				clr		mot
 				clr		finint		; pas de fin d'interruption
@@ -361,10 +371,10 @@ debut:
 				setb		et0			; enable timer0
 				setb		ex0
 				setb		it0          
-        			setb		et1
-				setb		ea				; enable all ,validation generale
+        			setb		ea				; enable all ,validation generale
         			clr		pt0			; interruption timer0 en priorit‚ 0
 				clr		px0
+        			cpl		ledmC
         			mov		r6,#2			; increment pour la direction
         			mov		r7,#1			; increment pour la vitesse
 				mov		vd2l,#vd1l	; chargement de la valeur de repos 1500æs
@@ -378,8 +388,9 @@ debut:
 				mov		vmr2h,#vmr1h
 				
 				mov		servostate,#0
-				mov		odoc,#nb_ticks_odo			
-	
+				mov		asservitc,#1	; valeur de compteur pour vitesse
+								;	initialise a 1 pour lancer immediatemment
+				
 				mov		r0,#0			; debut du traitement des signaux dir et mot
 				mov		th0,#0FFh	; pour lancement du timer 0 premiŠre fois
 				mov		tl0,#0F0h	; pour lancement du timer 0 premiŠre fois
@@ -387,11 +398,7 @@ debut:
 											; ensuite le timer se relance tout seul
 	
 				mov		r1,#1      ; 100x20ms = 2s
-				lcall		durecom
-				
-				lcall		start_motor
-				setb   		tr1
-    
+				lcall		durecom    
 main:
 				jb		capd,test_g
 				jnb		capg,main
@@ -507,7 +514,7 @@ suph3:
 				mov		vd2l,#0b4h
 				mov		vdr2h,#0bfh
 				mov		vdr2l,#0f0h
-			;	setb		ledmC
+				setb		ledmC
 				 
 sortie_droite3:
 		;		mov		servostate,#2
@@ -539,7 +546,7 @@ infh4:
 				mov		vd2l,#84h	;07d0h=2000d
 				mov		vdr2h,#0c3h	;reste de l'impulsion 3c8ch=15500d
 				mov		vdr2l,#20h
-			;	clr		ledmC	
+				clr		ledmC	
 
 sortie_gauche2:
 			;	clr		ledmC
