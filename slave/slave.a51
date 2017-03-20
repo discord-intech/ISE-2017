@@ -37,6 +37,12 @@ master		bit	P3.1
 				org   0030h
 debut:		
 				clr	master						;Initialisation du master
+
+				CLR	SIRENE						; init sirène
+
+				clr	laser						; init laser
+
+				
 											;Initialisation du lcd
 				lcall	init_lcd
 				
@@ -65,33 +71,65 @@ recv:				mov 	A,SBUF
 				mov	C,tire
 				jc	same_lap
 new_lap:
-				mov	A,tour
-				CJNE	A,#00h,first_lap
-				CJNE	A,#03h,last_lap
-				sjmp	end_0
-first_lap:			
+							
 				setb	master
+				NOP
+				NOP
+				NOP
+				NOP
+				CLR	MASTER
+				mov	A,tour
+				CJNE	A,#00h,tour_1;
+
+tour_n:				
 				sjmp	end_0
 
-last_lap:			
-				clr	master
+
+				
+
+tour_1:				lcall	send_0_LCD
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				
+				
 				
 				
 
 end_0:				setb	tire
 				inc	tour
+				lcall	send_tour_lcd
 				
 
-same_lap:			lcall	send_0_LCD
+same_lap:			
 				ret
 				
 non_0:				CJNE	A,#34h,non_4
 				mov	C,tire
 				jnc	non_tire
-				clr	laser
+				setb	laser
 				setb	sirene
+				lcall	send_4_LCD
+				ret
 				
-non_tire:			lcall	send_4_LCD
+non_tire:			lcall	send_tour_LCD
 				ret
 				
 non_4:				CJNE	A,#43h,non_C
@@ -102,14 +140,14 @@ non_C:				CJNE	A,#44h,non_D
 				lcall	send_D_LCD
 				ret
 non_D:				CJNE	A,#47h,non_G
-				setb	laser
+				clr	laser
 				clr	sirene
 				clr	tire
 				lcall	send_G_LCD
 				ret
 
-non_G:				
-				lcall	send_idle_LCD
+non_G:			
+				lcall	send_tour_lcd
 				ret
 
 
@@ -118,39 +156,7 @@ non_G:
 				
 				
 
-;----------------------------------------------------------
-;Sous-programme du reception du "0"
-recu_0:				
 
-				lcall 	send_0_LCD
-				
-				ret				
-;----------------------------------------------------------
-;Sous-programme du reception du "4"
-recu_4:				
-
-				lcall 	send_4_LCD
-				
-				ret
-
-;----------------------------------------------------------
-;Sous-programme du reception du "D"
-recu_D:				
-				lcall 	send_D_LCD
-				
-				ret
-;----------------------------------------------------------
-;Sous-programme du reception du "C"
-recu_C:				
-				lcall 	send_C_LCD
-				ret
-				
-;----------------------------------------------------------
-;Sous-programme du reception du "G"
-recu_G:				
-				lcall 	send_G_LCD
-				ret
-				
 
 ;-------------------------------------------------------------------------------------------------------------
 ;Sous-programme timer 50 ms, entré void, sortie void, utilisé A	
@@ -160,7 +166,7 @@ recu_G:
 tempo:
 				clr		tr0
 				clr		tf0
-				mov		tmod,#01h		;comptage sur 16 bits avec horloge interne (Quartz 12 MHz)
+				
 				mov		th0,#3Ch			;(65535-15535)=40000d soit 3CB0h
 				mov		tl0,#0B0h
 				setb		tr0				;lance le comptage de Timer0
@@ -246,7 +252,7 @@ emission:
             CLR		 A
             movc      A,@A+DPTR
             JZ        sortie
-            mov       P2,A
+            mov       lcd,A
             lcall     en_lcd_data
             inc       DPTR
            
@@ -258,6 +264,7 @@ sortie:     ret
 ;Out Void
 ;Use lcd
 init_lcd:
+				mov		tmod,#01h		;comptage sur 16 bits avec horloge interne (Quartz 12 MHz)
 				mov		r6,#4
 init1:				lcall		tempo
 				mov		lcd,#38h			;affiche sur 2 lignes en 5x8 points
@@ -287,9 +294,10 @@ init1:				lcall		tempo
 
 ;envoie de la valeur stocké à l'adresse 40h
 
-send_r_lcd:			lcall ligne_1
+send_r1_lcd:			
 				CLR	  A
-            			mov       A,@R0
+            			mov       A,tour
+            			add	  A,#30h
             			mov       lcd,A
             			lcall     en_lcd_data
             			
@@ -393,6 +401,26 @@ send_C_LCD:												;  Envoie du C aux LCD
 				clr	C
 				ret		
 
+
+;envoie du 0
+;In void
+;Out Void
+;Use DPTR
+send_tour_LCD:												;  Envoie du 4 aux LCD
+				mov      DPTR,#line_tour_a
+		   		lcall    ligne_1
+		   		lcall    emission
+		   		
+		   		mov      DPTR,#line_tour_b
+		   		lcall    ligne_2
+		   		lcall    send_r1_lcd
+		   		lcall    emission
+				
+				
+				
+				clr	C
+				ret
+
 ;---------------------------------------------------------------------------------------------------------------------
 ;initialisation de la liaison serie TSOP 1738	
 ;In void
@@ -438,10 +466,10 @@ wait:				JNB	RI,wait
 ; data
 
 line_idle_a:
-				db	'HORS'
+				db	'EN ATTENTE'
 				db	00h
 line_idle_b:
-				db	'PORTEE'
+				db	'GROUPE 4'
 				db	00h
 
 line_0_a:
@@ -467,6 +495,12 @@ line_centre:
 line_gauche:
 				db 'GAUCHE'
 				db 00h
+
+line_tour_a:			db 	'TOUR '
+				db	00h
+
+line_tour_b:			db	'/3'
+				db	00h
 
 
 
