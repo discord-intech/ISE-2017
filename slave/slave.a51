@@ -17,8 +17,14 @@ busy		bit	p2.7
 sirene		bit	P1.3
 laser		bit	P1.2
 tire		bit	00h								;variable de tire, 1 signifie que l'on peux tirer, et 0 que l'on ne peux pas
-tour		equ	R1
-master		bit	P3.1
+gauche		bit	01h								;variable de point pour le gauche
+centre		bit	02h								;variable de point pour le centre
+droit		bit	03h								;variable de point pour le droit
+tour		data	30h
+pgauche		data	31h
+pcentre		data	32h
+pdroit		data    33h
+master		bit	P3.4
 
 ;---------------------------------------------------------------------------------------------------------
 ;Implementation des adresses
@@ -36,7 +42,7 @@ master		bit	P3.1
 
 				org   0030h
 debut:		
-				clr	master						;Initialisation du master
+				setb	master						;Initialisation du master
 
 				CLR	SIRENE						; init sirène
 
@@ -72,17 +78,20 @@ recv:				mov 	A,SBUF
 				jc	same_lap
 new_lap:
 							
+				clr	master
+				NOP
+				NOP
+				NOP
+				NOP
+				NOP
+				NOP
+				NOP
+				NOP
 				setb	master
-				NOP
-				NOP
-				NOP
-				NOP
-				CLR	MASTER
 				mov	A,tour
-				CJNE	A,#00h,tour_1;
+				CJNE	A,#00h,end_0;
 
-tour_n:				
-				sjmp	end_0
+
 
 
 				
@@ -114,9 +123,22 @@ tour_1:				lcall	send_0_LCD
 				
 
 end_0:				setb	tire
-				inc	tour
-				lcall	send_tour_lcd
+				setb	gauche
+				setb	droit
+				setb	centre
+
+
+				mov	A,tour
+				CJNE	A,#03h,end_1
+				sjmp	last_lap		
 				
+
+				
+end_1:				inc	tour
+				lcall	send_tour_lcd
+
+last_lap:			lcall	send_last_lcd
+wait_end:			sjmp	wait_end				
 
 same_lap:			
 				ret
@@ -124,26 +146,58 @@ same_lap:
 non_0:				CJNE	A,#34h,non_4
 				mov	C,tire
 				jnc	non_tire
+				clr	tire
 				setb	laser
 				setb	sirene
 				lcall	send_4_LCD
 				ret
 				
-non_tire:			lcall	send_tour_LCD
+non_tire:			
 				ret
 				
 non_4:				CJNE	A,#43h,non_C
+				mov	c,centre
+				jnc	non_point
+				inc	pcentre
+				clr	centre
 				lcall	send_C_LCD
-				ret
+				
+				
+non_point:			ret
 
 non_C:				CJNE	A,#44h,non_D
+				mov	c,droit
+				jnc	non_point
+				inc	pdroit
+				clr	droit
 				lcall	send_D_LCD
+				
+				
 				ret
 non_D:				CJNE	A,#47h,non_G
 				clr	laser
 				clr	sirene
 				clr	tire
+
+				mov	c,gauche
+				jnc	non_point
+				inc	pgauche
+				clr	gauche
 				lcall	send_G_LCD
+				
+				
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	send_tour_lcd
+				
 				ret
 
 non_G:			
@@ -292,11 +346,11 @@ init1:				lcall		tempo
 				ret
 
 
-;envoie de la valeur stocké à l'adresse 40h
+;envoie de la valeur stocké dans r1
 
 send_r1_lcd:			
 				CLR	  A
-            			mov       A,tour
+            			mov       A,r1
             			add	  A,#30h
             			mov       lcd,A
             			lcall     en_lcd_data
@@ -375,7 +429,7 @@ send_G_LCD:												;  Envoie du G aux LCD
 		   		
 				
 				clr	C
-				ret
+				ljmp	send_tour_line2_LCD
 
 ;envoie de G
 ;In void
@@ -387,7 +441,7 @@ send_D_LCD:												;  Envoie du D aux LCD
 		   		lcall    emission
 				
 				clr	C
-				ret
+				ljmp	send_tour_line2_LCD
 				
 ;envoie de G
 ;In void
@@ -399,8 +453,7 @@ send_C_LCD:												;  Envoie du C aux LCD
 		   		lcall    emission
 				
 				clr	C
-				ret		
-
+				ljmp	send_tour_line2_LCD
 
 ;envoie du 0
 ;In void
@@ -411,15 +464,52 @@ send_tour_LCD:												;  Envoie du 4 aux LCD
 		   		lcall    ligne_1
 		   		lcall    emission
 		   		
-		   		mov      DPTR,#line_tour_b
-		   		lcall    ligne_2
+		   		
+		   		mov	 r1,tour
 		   		lcall    send_r1_lcd
+		   		
+		   		mov      DPTR,#line_tour_b
 		   		lcall    emission
+
 				
+send_tour_line2_LCD:	   	mov      DPTR,#line_tour_c
+				lcall    ligne_2
+				lcall    emission
+
+				mov	 r1,pdroit
+		   		lcall    send_r1_lcd
+
+		   		mov      DPTR,#line_tour_d
+				lcall    emission
+
+				mov	 r1,pcentre
+		   		lcall    send_r1_lcd
+
+		   		mov      DPTR,#line_tour_e
+				lcall    emission
+
+				mov	 r1,pgauche
+		   		lcall    send_r1_lcd
 				
 				
 				clr	C
 				ret
+
+
+;envoie du message de fin
+;In void
+;Out Void
+;Use DPTR
+send_last_LCD:												;  Envoie du C aux LCD
+				mov      DPTR,#line_last_a
+		   		lcall    ligne_1
+		   		lcall    emission
+				
+				mov      DPTR,#line_last_b
+		   		lcall    ligne_2
+		   		lcall    emission
+
+		   		ret
 
 ;---------------------------------------------------------------------------------------------------------------------
 ;initialisation de la liaison serie TSOP 1738	
@@ -502,7 +592,18 @@ line_tour_a:			db 	'TOUR '
 line_tour_b:			db	'/3'
 				db	00h
 
+line_tour_c:			db	'D:'
+				db	00h
+line_tour_d:			db	' C:'
+				db	00h
+line_tour_e:			db	' G:'
+				db	00h
 
+line_last_a:			db  	'C est le 20'
+				db	00h
+
+line_last_b:			db  	'GG EZ'
+				db	00h
 
 ;---------------------------------------------------------------------------------------------------------
 ; Fin d'assemblage 
