@@ -33,7 +33,8 @@ nb_ticks_odo		equ		7
 
 servo_inc		equ		90
 
-consigne		equ		8
+consigne_high		equ	 	9
+consigne_low		equ		10
 
 ;memoires recevant les valeurs a charger dans Timer0 
 ;pour realiser les durees de:
@@ -49,7 +50,11 @@ vmr2h			equ		78h
 
 odoc			equ		77h		; ticks codeuse
 
+consigne_pwm		equ		75h
+lap_count		equ		74h
+
 servostate		equ		73h		; etat servo 0=centre 1=gauche 2=droite
+servo_count		equ		72h
 timer_ov		equ		71h
 
 vth0			equ		6eh		;memoire intermediaire recevant les valeurs
@@ -67,6 +72,7 @@ vtl0			equ		6fh		;a transferer dans th0 et tl0
 				ljmp		pinttimer0
 
 				org		0013h			;interruption int1
+				ljmp		handle_slave
                               	         
 				org		001Bh			;interruption timer1 
 				ljmp		timer_overflow					
@@ -86,20 +92,25 @@ pinttimer0:
 
 tr0a0: 
 				cjne		r0,#0,tr0a1		;direction
+			;	djnz		servo_count,nothing
+			;	mov		servo_count,#4
 				mov		a,servostate
 				cjne		a,#1,droite
 				lcall		tournedroite
+				mov		consigne_pwm,#consigne_high
 				sjmp		nothing						
 droite:
 				cjne		a,#2,center
 				lcall		tournegauche
+				mov		consigne_pwm,#consigne_low
 				sjmp		nothing
 center:				
 				jnz		nothing
 				mov		vd2l,#vd1l	; chargement de la valeur de repos 1500æs
 				mov		vd2h,#vd1h	; pour la direction
 				mov		vdr2l,#vdr1l; chargement du complement (1000us)a 2,5ms
-				mov		vdr2h,#vdr1h; pour la direction 
+				mov		vdr2h,#vdr1h; pour la direction
+				mov		consigne_pwm,#consigne_high 
 				
 nothing:
 				mov		vtl0,vd2l
@@ -225,7 +236,33 @@ restdir4:
 				addc		a,#00h
 				mov		vdr2h,a
 				ret
- 
+;----------------------------------------------------------------------
+; gestion esclave
+
+handle_slave:			clr		ex1
+				clr		tr1
+				clr		et1
+				djnz		lap_count,stop_and_restart
+				lcall		stop_motor
+				setb		ledmC
+				sjmp		handle_slave_reti
+
+stop_and_restart:		
+				lcall		stop_motor
+				setb		ledmC
+				mov		r1,#150
+				lcall		durecom								
+				mov		r1,#1
+				lcall		start_motor
+				setb		tr1
+				setb		et1
+				setb		ex1
+				clr		ledmC
+
+handle_slave_reti:
+				reti 
+
+
 ;----------------------------------------------------------------------
 ;asservissement vitesse
 asservissement_vitesse:
@@ -235,7 +272,7 @@ asservissement_vitesse:
 
 				mov		a,timer_ov				
 				clr 		c
-				subb		a,#consigne
+				subb		a,consigne_pwm
 				jz		check_pwm
 				jnc		over
 				cpl		a
@@ -302,9 +339,9 @@ no_underflow:
 
 start_motor:
 				mov		vm2h,#0f9h	;chargement de la valeur min 
-				mov		vm2l,#0c0h	;(65536-2000)=63536d=f830h
+				mov		vm2l,#0d4h	;(65536-2000)=63536d=f830h
 				mov		vmr2h,#0c1h	;reste de l'impulsion 
-				mov		vmr2l,#0dch	;(65536-15500)=50036d=c374h
+				mov		vmr2l,#0c8h	;(65536-15500)=50036d=c374h
 				ret
 
 stop_motor:		
@@ -336,7 +373,7 @@ durecom:										 ; gère r1 =  Nb de commandes soit r1*20ms
 odo_inc:
 				djnz		odoc,odo_inc_reti
 				clr		tr1
-				cpl		ledmC
+				;cpl		ledmC
 				mov		odoc,#nb_ticks_odo
 				lcall		asservissement_vitesse
 				mov		timer_ov,#0
@@ -363,7 +400,7 @@ debut:
 				setb		it0          
         			setb		et1
 				setb		ea				; enable all ,validation generale
-        			clr		pt0			; interruption timer0 en priorit‚ 0
+        			setb		pt0			; interruption timer0 en priorit‚ 0
 				clr		px0
         			mov		r6,#2			; increment pour la direction
         			mov		r7,#1			; increment pour la vitesse
@@ -378,20 +415,29 @@ debut:
 				mov		vmr2h,#vmr1h
 				
 				mov		servostate,#0
+				mov		servo_count,#10
 				mov		odoc,#nb_ticks_odo			
-	
+				mov		consigne_pwm,#consigne_high
+				mov		lap_count,#3
+					
 				mov		r0,#0			; debut du traitement des signaux dir et mot
 				mov		th0,#0FFh	; pour lancement du timer 0 premiŠre fois
 				mov		tl0,#0F0h	; pour lancement du timer 0 premiŠre fois
 				setb		tr0			; lancement du timer0
 											; ensuite le timer se relance tout seul
 	
-				mov		r1,#1      ; 100x20ms = 2s
+				mov		r1,#200      ; 200x20ms = 4s
 				lcall		durecom
-				
+				mov		r1,#1
+				setb		ledmC
+
+wait_start:			jb		p3.3,wait_start
+				clr		ledmC				
+
 				lcall		start_motor
 				setb   		tr1
-    
+				setb		it1
+				setb		ex1    
 main:
 				jb		capd,test_g
 				jnb		capg,main
@@ -419,14 +465,14 @@ reset_orient:			;mov		a,servostate
 				mov		servostate,#0
 				sjmp		main		; attente de l'appui sur un bouton
 ralentir:
-				cpl		ledmc
+				;cpl		ledmc
 				lcall		decelere		; sous prog de decelaration
 				lcall		tournedroite	;sous prog de virage a droite
 				mov		r1,#1
 				lcall		durecom
 				sjmp		main	
 augmenter:
-				cpl		ledmc
+				;cpl		ledmc
 				lcall		accelere		; sous prog d'acceleration
 				lcall		tournegauche	;sous prog de virage a gauche
 				mov		r1,#1
