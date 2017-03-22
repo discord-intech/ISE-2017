@@ -136,6 +136,7 @@ end_0:				setb	tire
 				
 end_1:				inc	tour
 				lcall	send_tour_lcd
+				ret
 
 last_lap:			lcall	send_last_lcd
 wait_end:			sjmp	wait_end				
