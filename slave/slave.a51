@@ -60,9 +60,123 @@ debut:
 
 				mov	tour,#00h					;Initialisation du nombre de tour
 
-				
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall 	tempo
+				lcall	tempo
+				lcall	tempo
+				lcall	tempo
+
+				lcall 	debug
 				
 fin:			sjmp	fin							; boucle infinie
+
+;------------------------------------------------------------------------------------------
+debug:				clr	master
+				NOP
+				NOP
+				NOP
+				NOP
+				NOP
+				NOP
+				NOP
+				NOP
+				setb	master
+				ret
 
 ;----------------------------------------------------------
 ;Code après reception
